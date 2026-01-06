@@ -127,7 +127,7 @@ func TestDownloadFile_HTTP_Golden(t *testing.T) {
 
 			ch, _ := s.TransferListener(tt.cfg.URL)
 
-			err := s.DownloadFile(ctx, &tt.cfg)
+			_, err := s.DownloadFile(ctx, &tt.cfg)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err=%v wantErr=%v", err, tt.wantErr)
 			}
@@ -195,7 +195,7 @@ func TestDownloadFile_HTTP_BadStatus_Golden(t *testing.T) {
 	}
 
 	ch, _ := s.TransferListener(dl.URL)
-	err := s.DownloadFile(context.Background(), &dl)
+	_, err := s.DownloadFile(context.Background(), &dl)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -252,7 +252,7 @@ func TestDownloadFile_Curl_Golden(t *testing.T) {
 	}
 
 	ch, _ := s.TransferListener(dl.URL)
-	err := s.DownloadFile(context.Background(), &dl)
+	_, err := s.DownloadFile(context.Background(), &dl)
 	if err != nil {
 		t.Fatalf("DownloadFile err: %v", err)
 	}

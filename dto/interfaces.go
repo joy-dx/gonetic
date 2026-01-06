@@ -7,7 +7,7 @@ import (
 type NetInterface interface {
 	Hydrate(ctx context.Context) error
 	State() *NetState
-	DownloadFile(ctx context.Context, cfg *DownloadFileConfig) error
+	DownloadFile(ctx context.Context, cfg *DownloadFileConfig) (string, error)
 	Get(ctx context.Context, url string, withRetry bool) (Response, error)
 	Post(ctx context.Context, url string, payload map[string]interface{}, withRetry bool) (Response, error)
 	RegisterClient(ref string, client NetClientInterface)

@@ -284,13 +284,13 @@ func (s *NetSvc) downloadFileWithCurl(
 	}
 }
 
-func (s *NetSvc) DownloadFile(ctx context.Context, cfg *dto.DownloadFileConfig) error {
+func (s *NetSvc) DownloadFile(ctx context.Context, cfg *dto.DownloadFileConfig) (string, error) {
 
 	if cfg.OutputFileName == "" {
 		// Try and get the filename from the URL and use the destination folder instead
 		filename, err := utils.FilenameFromUrl(cfg.URL)
 		if err != nil {
-			return err
+			return "", err
 		}
 		cfg.OutputFileName = filename
 	}
@@ -306,8 +306,8 @@ func (s *NetSvc) DownloadFile(ctx context.Context, cfg *dto.DownloadFileConfig) 
 	})
 
 	if s.cfg.PreferCurlDownloads {
-		return s.downloadFileWithCurl(ctx, cfg, destination)
+		return destination, s.downloadFileWithCurl(ctx, cfg, destination)
 	}
 
-	return s.downloadFileWithHTTP(ctx, cfg, destination)
+	return destination, s.downloadFileWithHTTP(ctx, cfg, destination)
 }
