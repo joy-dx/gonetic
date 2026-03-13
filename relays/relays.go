@@ -1,6 +1,7 @@
 package relays
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/joy-dx/gonetic/dto"
@@ -41,7 +42,7 @@ func (e RlyNetDownload) ToSlog() []slog.Attr {
 }
 
 func (e RlyNetDownload) Message() string {
-	return e.Msg
+	return fmt.Sprintf("%s %.2f%% %s", e.Destination, e.Percentage, e.Msg)
 }
 
 func (e RlyNetDownload) RelayChannel() relayDTO.EventChannel {
