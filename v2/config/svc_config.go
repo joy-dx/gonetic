@@ -3,7 +3,7 @@ package config
 import (
 	"time"
 
-	"github.com/joy-dx/gonetic/dto"
+	"github.com/joy-dx/gonetic/v2/dto"
 	relayDTO "github.com/joy-dx/relay/v2/dto"
 )
 

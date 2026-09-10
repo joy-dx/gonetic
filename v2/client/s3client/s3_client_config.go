@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/joy-dx/gonetic/dto"
+	"github.com/joy-dx/gonetic/v2/dto"
 )
 
 const NetClientS3Ref dto.NetClientType = "net.client.s3"

@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/joy-dx/gonetic/dto"
+	"github.com/joy-dx/gonetic/v2/dto"
 )
 
 func (c *S3Client) doList(ctx context.Context, r *S3Request) (dto.Response, error) {

@@ -6,9 +6,9 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/joy-dx/gonetic/client/httpclient"
-	"github.com/joy-dx/gonetic/dto"
-	"github.com/joy-dx/gonetic/relays"
+	"github.com/joy-dx/gonetic/v2/client/httpclient"
+	"github.com/joy-dx/gonetic/v2/dto"
+	"github.com/joy-dx/gonetic/v2/relays"
 )
 
 func (s *NetSvc) State() *dto.NetState {

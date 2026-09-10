@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/joy-dx/gonetic/dto"
+	"github.com/joy-dx/gonetic/v2/dto"
 )
 
 func (c *S3Client) ProcessRequest(ctx context.Context, reqCfg *dto.RequestConfig) (dto.Response, error) {

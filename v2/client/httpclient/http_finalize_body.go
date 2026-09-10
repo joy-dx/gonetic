@@ -3,7 +3,7 @@ package httpclient
 import (
 	"fmt"
 
-	"github.com/joy-dx/gonetic/utils"
+	"github.com/joy-dx/gonetic/v2/utils"
 )
 
 // FinalizeBody prepares BodyBytes and ContentType exactly once per call.

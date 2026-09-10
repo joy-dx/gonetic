@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/joy-dx/gonetic/utils"
+	"github.com/joy-dx/gonetic/v2/utils"
 )
 
 type ReqConfigInterface interface {

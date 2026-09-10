@@ -28,7 +28,7 @@ A small network “service” layer that abstracts request execution behind a co
 ## Installation
 
 ```bash
-go get github.com/joy-dx/gonetic
+go get github.com/joy-dx/v2/gonetic
 ```
 
 ## Quick start
@@ -41,9 +41,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/joy-dx/gonetic"
-	"github.com/joy-dx/gonetic/config"
-	"github.com/joy-dx/gonetic/dto"
+	"github.com/joy-dx/gonetic/v2"
+	"github.com/joy-dx/gonetic/v2/config"
 	relayDTO "github.com/joy-dx/relay/v2/dto"
 )
 

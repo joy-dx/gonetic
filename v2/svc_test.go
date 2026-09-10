@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joy-dx/gonetic/config"
-	"github.com/joy-dx/gonetic/dto"
+	"github.com/joy-dx/gonetic/v2/config"
+	"github.com/joy-dx/gonetic/v2/dto"
 	"github.com/joy-dx/lockablemap"
 	relayDTO "github.com/joy-dx/relay/v2/dto"
 )

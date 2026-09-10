@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/joy-dx/gonetic/dto"
-	"github.com/joy-dx/gonetic/relays"
-	"github.com/joy-dx/gonetic/utils"
+	"github.com/joy-dx/gonetic/v2/dto"
+	"github.com/joy-dx/gonetic/v2/relays"
+	"github.com/joy-dx/gonetic/v2/utils"
 )
 
 // downloadFileWithHTTP streams via net/http with progress

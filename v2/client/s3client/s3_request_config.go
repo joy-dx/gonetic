@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/joy-dx/gonetic/dto"
+	"github.com/joy-dx/gonetic/v2/dto"
 )
 
 // S3RequestConfig defines the structure of an S3 request operation.

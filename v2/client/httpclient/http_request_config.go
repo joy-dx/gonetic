@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/joy-dx/gonetic/dto"
+	"github.com/joy-dx/gonetic/v2/dto"
 )
 
 // HTTPRequestConfig is immutable input (safe to reuse).

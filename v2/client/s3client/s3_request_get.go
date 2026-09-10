@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/joy-dx/gonetic/dto"
-	"github.com/joy-dx/gonetic/utils"
+	"github.com/joy-dx/gonetic/v2/dto"
+	"github.com/joy-dx/gonetic/v2/utils"
 )
 
 func (c *S3Client) doGet(ctx context.Context, r *S3Request) (dto.Response, error) {
