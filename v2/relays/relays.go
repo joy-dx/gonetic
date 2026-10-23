@@ -45,7 +45,7 @@ func (e RlyNetDownload) Message() string {
 	if e.Msg != "" {
 		return e.Msg
 	}
-	return fmt.Sprintf("%s downloaded %d bytes (%.2f%%)", e.Source, e.Downloaded, e.Percentage)
+	return fmt.Sprintf("%s downloaded %d bytes (%.2f%%)", e.Destination, e.Downloaded, e.Percentage)
 }
 
 func (e RlyNetDownload) RelayChannel() relayDTO.EventChannel {

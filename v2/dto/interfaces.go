@@ -2,6 +2,7 @@ package dto
 
 import (
 	"context"
+	"net/http"
 )
 
 type NetInterface interface {
@@ -21,6 +22,13 @@ type NetInterface interface {
 type AuthProvider interface {
 	Authenticate(ctx context.Context) (TokenInfo, error)
 	Refresh(ctx context.Context, old TokenInfo) (TokenInfo, error)
+}
+
+// DownloadAgent executes a request and returns a streaming response.
+//
+// Implementations must honor req.Context(). The caller owns response.Body.
+type DownloadAgent interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // Middleware is executed before each request.
