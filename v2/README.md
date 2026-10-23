@@ -6,7 +6,9 @@ A small network “service” layer that abstracts request execution behind a co
 - A default **HTTP client**
 - An **S3 client** (get/put/list/delete) with middleware support
 - **Retry behavior** with pluggable delay strategies
-- A **file downloader** with progress callbacks and optional SHA-256 verification
+- A **file downloader** with interchangeable HTTP/curl transports,
+  progress notifications, resumable downloads, custom clients, and
+  optional SHA-256 verification
 
 ## Concepts
 
@@ -28,7 +30,7 @@ A small network “service” layer that abstracts request execution behind a co
 ## Installation
 
 ```bash
-go get github.com/joy-dx/v2/gonetic
+go get github.com/joy-dx/gonetic/v2
 ```
 
 ## Quick start
@@ -223,61 +225,286 @@ Default request config uses:
 
 ## File downloads
 
-NetSvc supports downloading to a destination folder with progress notifications.
+`DownloadFile` streams an HTTP or HTTPS resource to disk and returns its
+destination path.
+
+Downloads support:
+
+- Periodic progress notifications.
+- Optional SHA-256 verification.
+- Optional `.part` files.
+- Resume using HTTP byte ranges and strong ETags.
+- Per-download headers and user agents.
+- Custom HTTP clients or download agents.
+- Native `net/http` or curl-backed transport.
+
+### Basic download
 
 ```go
-cfg := &dto.DownloadFileConfig{
-	URL:               "https://host/path/file.zip",
-	DestinationFolder: "/tmp/downloads",
-	OutputFileName:    "file.zip", // optional; derived from URL if empty
-	Checksum:          "",          // optional sha256 hex
+destination, err := svc.DownloadFile(
+	ctx,
+	&dto.DownloadFileConfig{
+		URL:               "https://example.com/artifact.tar.gz",
+		DestinationFolder: "/var/cache/artifacts",
+		OutputFileName:    "artifact.tar.gz",
+	},
+)
+if err != nil {
+	return err
 }
 
-err := svc.DownloadFile(ctx, cfg)
+fmt.Println("Downloaded:", destination)
 ```
+
+If `OutputFileName` is empty, the filename is derived from the URL.
+The destination directory is created automatically.
+
+`DownloadFile` copies the configuration and its headers before preparing
+the request; it does not modify the caller's configuration.
+
+### Download configuration
+
+| Option | Behavior |
+| --- | --- |
+| `URL` | HTTP or HTTPS resource to download. |
+| `DestinationFolder` | Directory containing the downloaded file. |
+| `OutputFileName` | Optional filename; derived from the URL when empty. |
+| `UsePartFile` | Download to `<destination>.part`, then rename after successful transfer and verification. |
+| `Resume` | Attempt to continue an existing file using saved URL and strong ETag metadata. |
+| `Checksum` | Optional expected SHA-256 checksum. |
+| `Headers` | Per-download `http.Header`, including multi-value headers. |
+| `UserAgent` | Overrides the `User-Agent` header when nonempty. |
+| `Agent` | Optional client implementing `Do(*http.Request) (*http.Response, error)`. |
+
+Without an explicit `UserAgent`, an existing `User-Agent` header is
+preserved. Otherwise the download user agent defaults to `NetSvc/1.0`.
+
+### Part files, resume, and checksums
+
+```go
+destination, err := svc.DownloadFile(
+	ctx,
+	&dto.DownloadFileConfig{
+		URL:               artifactURL,
+		DestinationFolder: "/var/cache/artifacts",
+		OutputFileName:    "artifact.tar.gz",
+		UsePartFile:       true,
+		Resume:            true,
+		Checksum:          expectedSHA256,
+		UserAgent:         "artifact-service/2.0",
+		Headers: http.Header{
+			"Authorization": {"Bearer " + token},
+			"X-Request-ID":  {requestID},
+		},
+	},
+)
+if err != nil {
+	return err
+}
+
+fmt.Println("Downloaded:", destination)
+```
+
+With `UsePartFile: true`, the downloader writes to:
+
+```text
+/var/cache/artifacts/artifact.tar.gz.part
+```
+
+It renames the part file to the final destination only after the transfer,
+file synchronization, and optional checksum verification succeed.
+A failed transfer or checksum verification does not replace an existing
+destination file.
+
+Without `UsePartFile`, the destination itself is the working file and may
+contain incomplete data after an error.
+
+#### Resume behavior
+
+Resume is attempted only when:
+
+- `Resume` is enabled.
+- The working file contains data.
+- Its resume metadata matches the requested URL.
+- The metadata contains a strong ETag.
+
+Metadata is stored beside the working file:
+
+```text
+artifact.tar.gz.part.resume.json
+```
+
+Without part files, the metadata path is:
+
+```text
+artifact.tar.gz.resume.json
+```
+
+A resume request sends `Range` and `If-Range`. The downloader validates the
+returned byte range, total size, and ETag before appending bytes.
+
+If the server ignores the range, returns an invalid partial response, or
+rejects the range, the downloader restarts from the beginning. Missing,
+invalid, URL-mismatched, or weak-ETag metadata also causes a fresh
+download.
+
+Interrupted downloads retain their working file and any valid resume
+metadata. Call `DownloadFile` again with the same URL and destination to
+attempt resume.
+
+Successful downloads remove the metadata. Checksum failures invalidate
+the metadata so known-invalid data is not resumed.
+
+Resume is not an automatic retry loop: a failed transfer returns an error,
+and the caller decides when to retry.
+
+### Custom HTTP clients and agents
+
+Set `Agent` to use an existing `*http.Client`, for example one configured
+with authentication, proxy settings, a timeout, or a custom transport:
+
+```go
+client := &http.Client{
+	Timeout: 10 * time.Minute,
+}
+
+destination, err := svc.DownloadFile(
+	ctx,
+	&dto.DownloadFileConfig{
+		URL:               artifactURL,
+		DestinationFolder: "/var/cache/artifacts",
+		OutputFileName:    "artifact.tar.gz",
+		UsePartFile:       true,
+		Resume:            true,
+		Agent:             client,
+	},
+)
+if err != nil {
+	return err
+}
+
+fmt.Println("Downloaded:", destination)
+```
+
+An explicit `Agent` takes precedence over `PreferCurlDownloads`.
+
+Custom agents must return a valid response with a non-nil body. They
+should honor the request context and preserve the requested byte
+representation.
+
+The downloader owns the `Range` and `If-Range` headers; caller-provided
+values are removed. It sets `Accept-Encoding: identity` and rejects
+encoded or automatically decompressed responses so byte offsets remain
+consistent with the file on disk.
 
 ### curl vs net/http
 
-`NetSvcConfig.PreferCurlDownloads` controls the download engine:
+When `Agent` is not provided:
 
-- If `PreferCurlDownloads == true`, NetSvc executes:
+- `PreferCurlDownloads: false` uses `http.DefaultClient`.
+- `PreferCurlDownloads: true` uses an `http.Client` backed by
+  `CurlTransport`.
 
-```bash
-curl -L --progress-bar -o <destination> <url>
+Both transports use the same download pipeline for progress accounting,
+resume validation, checksums, part files, and final notifications.
+
+Curl acts as a streaming transport. It does not write the destination
+file directly, and progress is not parsed from curl's progress output.
+Redirect handling belongs to the wrapping `http.Client`.
+
+`CurlTransport` supports HTTP/HTTPS GET requests without a request body.
+It uses the `curl` executable on `PATH` by default. An alternative
+executable can be configured explicitly:
+
+```go
+client := &http.Client{
+	Transport: gonetic.CurlTransport{
+		Executable: "/usr/local/bin/curl",
+	},
+}
 ```
 
-- Otherwise it streams using `net/http` and `io.CopyBuffer`
+Pass that client as the download `Agent`.
 
-Special behavior:
-- On macOS, `Hydrate()` forces curl preference to align with download security policy.
-- If curl is preferred but missing from `$PATH`, it falls back to `net/http`.
+The curl transport itself does not fall back to `net/http` if launching
+curl fails.
 
 ### Progress updates and listeners
 
-Both download paths publish `dto.TransferNotification` updates (in-progress, stopped, error, complete).
-
-You can subscribe by URL:
+Subscribe before starting the download:
 
 ```go
-ch, unsub := svc.TransferListener(url)
-defer unsub()
+artifactURL := "https://example.com/artifact.tar.gz"
+
+updates, unsubscribe := svc.TransferListener(artifactURL)
+defer unsubscribe()
 
 go func() {
-	for n := range ch {
-		// n.Percentage, n.Downloaded, n.TotalSize, n.Status
+	for update := range updates {
+		fmt.Printf(
+			"%s: %d / %d bytes (%.1f%%)\n",
+			update.Status,
+			update.Downloaded,
+			update.TotalSize,
+			update.Percentage,
+		)
 	}
 }()
+
+destination, err := svc.DownloadFile(
+	ctx,
+	&dto.DownloadFileConfig{
+		URL:               artifactURL,
+		DestinationFolder: "/tmp",
+		UsePartFile:       true,
+		Resume:            true,
+	},
+)
+if err != nil {
+	return err
+}
+
+fmt.Println("Downloaded:", destination)
 ```
 
-To force-close all listeners for a URL:
+Notifications include:
+
+- `IN_PROGRESS`: transfer started or periodic progress.
+- `COMPLETE`: transfer and optional verification succeeded.
+- `ERROR`: download failed.
+- `STOPPED`: the download context was canceled or expired.
+
+`DownloadCallbackInterval` controls periodic progress updates and defaults
+to two seconds when configured with a nonpositive duration.
+
+Progress counts bytes written to disk, including an existing resumed
+prefix. If the total size is unknown, percentage remains zero during the
+transfer; successful completion reports the actual size and 100%.
+
+Listeners are buffered. Intermediate progress snapshots may be replaced
+when a subscriber falls behind, but terminal notifications are retained.
+A terminal notification closes all current listeners for that URL.
+
+Calling the unsubscribe function is safe more than once, including after
+a terminal notification. To close all listeners for a URL explicitly:
 
 ```go
-svc.TransferListenerClose(url)
+svc.TransferListenerClose(artifactURL)
 ```
 
-Notes:
-- `downloadFileWithHTTP` reports downloaded/total/percentage periodically (interval from `DownloadCallbackInterval`)
-- `downloadFileWithCurl` parses percentage from curl’s progress output and publishes percentage updates
+Listeners are keyed by URL, not by an individual download invocation.
+
+### Cancellation and concurrent downloads
+
+Cancel or expire the context passed to `DownloadFile` to stop a transfer.
+
+A stopped transfer does not promote a part file to the final destination.
+When resume metadata is available, a later invocation can attempt to
+continue the working file.
+
+A `NetSvc` instance rejects overlapping active destination or working-file
+paths. This protection is local to that service instance; it is not a
+cross-process filesystem lock.
 
 ## Examples
 
@@ -330,24 +557,3 @@ svc.RegisterClient("custom-http", custom)
 
 Then send a request with `ClientRef: "custom-http"`.
 
-### 3) Download with progress listener
-
-```go
-url := "https://example.com/big.tar.gz"
-ch, unsub := svc.TransferListener(url)
-defer unsub()
-
-go func() {
-	for n := range ch {
-		fmt.Printf("%s %.1f%%\n", n.Status, n.Percentage)
-	}
-}()
-
-err := svc.DownloadFile(ctx, &dto.DownloadFileConfig{
-	URL:               url,
-	DestinationFolder: "/tmp",
-})
-if err != nil {
-	panic(err)
-}
-```

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -167,4 +169,135 @@ func (c *HTTPClient) ProcessRequest(ctx context.Context, inCfg *dto.RequestConfi
 	}
 
 	return response, nil
+}
+
+func (c *HTTPClient) Do(
+	req *http.Request,
+) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header = req.Header.Clone()
+
+	headers := make(map[string]string, len(req.Header))
+	for name := range req.Header {
+		headers[name] = req.Header.Get(name)
+	}
+
+	prepared := &HTTPRequest{
+		Method:  req.Method,
+		URL:     req.URL.String(),
+		Headers: headers,
+	}
+
+	for _, middleware := range c.cfg.Middlewares {
+		if err := middleware(req.Context(), prepared); err != nil {
+			return nil, fmt.Errorf("download middleware: %w", err)
+		}
+	}
+
+	if err := c.ensureToken(req.Context()); err != nil {
+		return nil, fmt.Errorf("ensure download token: %w", err)
+	}
+
+	c.tokenMu.RLock()
+	c.attachAuth(prepared)
+	c.tokenMu.RUnlock()
+
+	// Preserve repeated header values unless middleware/auth changed them.
+	for name, value := range prepared.Headers {
+		if value != req.Header.Get(name) {
+			req.Header.Set(name, value)
+		}
+	}
+
+	client := DownloadHTTPClient(c.client)
+	resp, err := client.Do(req)
+
+	if resp != nil {
+		c.captureCookiesFromResponse(dto.Response{
+			StatusCode: resp.StatusCode,
+			Headers:    resp.Header.Clone(),
+		})
+	}
+
+	return resp, err
+}
+
+func DownloadHTTPClient(base *http.Client) *http.Client {
+	if base == nil {
+		base = http.DefaultClient
+	}
+
+	client := *base
+	previousPolicy := base.CheckRedirect
+
+	client.CheckRedirect = func(
+		req *http.Request,
+		via []*http.Request,
+	) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+
+		if previousPolicy != nil {
+			if err := previousPolicy(req, via); err != nil {
+				return err
+			}
+		}
+
+		if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+			return fmt.Errorf(
+				"unsupported redirect scheme %q",
+				req.URL.Scheme,
+			)
+		}
+
+		// Do not silently downgrade authenticated HTTPS downloads.
+		for _, previous := range via {
+			if previous.URL.Scheme == "https" &&
+				req.URL.Scheme == "http" {
+				return errors.New("refusing HTTPS-to-HTTP redirect")
+			}
+		}
+
+		// Custom headers may contain credentials too. Once a redirect
+		// crosses origins, retain only download-safe headers.
+		crossedOrigin := false
+		for _, previous := range via {
+			if !sameDownloadOrigin(previous.URL, req.URL) {
+				crossedOrigin = true
+				break
+			}
+		}
+
+		if crossedOrigin {
+			for name := range req.Header {
+				switch strings.ToLower(name) {
+				case "accept", "accept-encoding", "user-agent",
+					"range", "if-range":
+				default:
+					req.Header.Del(name)
+				}
+			}
+		}
+
+		return nil
+	}
+
+	return &client
+}
+
+func sameDownloadOrigin(a, b *url.URL) bool {
+	port := func(u *url.URL) string {
+		if value := u.Port(); value != "" {
+			return value
+		}
+		if u.Scheme == "https" {
+			return "443"
+		}
+		return "80"
+	}
+
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		port(a) == port(b)
 }

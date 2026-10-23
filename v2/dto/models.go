@@ -41,6 +41,19 @@ type DownloadFileConfig struct {
 	DestinationFolder string
 	OutputFileName    string
 	SkipAllowedPaths  bool
+	// Write to "<destination>.part", then rename after verification.
+	UsePartFile bool
+
+	// Resume an existing download when a matching strong ETag is available.
+	// Otherwise, safely restart.
+	Resume bool
+
+	UserAgent string
+	Headers   http.Header
+
+	// Optional streaming client, including an authenticated HTTPClient.
+	// When supplied, this takes precedence over PreferCurlDownloads.
+	Agent DownloadAgent `json:"-" yaml:"-"`
 }
 
 type Response struct {
